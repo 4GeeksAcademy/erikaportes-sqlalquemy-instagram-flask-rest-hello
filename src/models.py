@@ -1,5 +1,5 @@
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import String, Boolean, ForeignKey, Text, DateTime
+from sqlalchemy import String, Boolean, ForeignKey, Text, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 
@@ -12,13 +12,31 @@ class User(db.Model):
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(
         String(120), unique=True, nullable=False)
-    password: Mapped[str] = mapped_column(String(80), nullable=False)
-    is_active: Mapped[bool] = mapped_column(
-        Boolean(), nullable=False, default=True)
+    password: Mapped[str] = mapped_column(String(10), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean(), default=True)
 
     # Relaciones
-    posts = relationship("Post", back_populates="user")
-    comments = relationship("Comment", back_populates="user")
+    posts = relationship("Post", back_populates="user",
+                         cascade="all, delete-orphan")
+    comments = relationship(
+        "Comment", back_populates="user", cascade="all, delete-orphan")
+    likes = relationship("Like", back_populates="user",
+                         cascade="all, delete-orphan")
+
+    # Seguidores
+    following = relationship(
+        "Follower",
+        foreign_keys="Follower.follower_id",
+        back_populates="follower",
+        cascade="all, delete-orphan"
+    )
+
+    followers = relationship(
+        "Follower",
+        foreign_keys="Follower.following_id",
+        back_populates="following",
+        cascade="all, delete-orphan"
+    )
 
     def serialize(self):
         return {
@@ -41,15 +59,17 @@ class Post(db.Model):
 
     # Relaciones
     user = relationship("User", back_populates="posts")
-    comments = relationship("Comment", back_populates="post")
-    likes = relationship("Like", back_populates="post")
+    comments = relationship(
+        "Comment", back_populates="post", cascade="all, delete-orphan")
+    likes = relationship("Like", back_populates="post",
+                         cascade="all, delete-orphan")
 
     def serialize(self):
         return {
             "id": self.id,
             "image_url": self.image_url,
             "caption": self.caption,
-            "created_at": self.created_at,
+            "created_at": self.created_at.isoformat(),
             "user_id": self.user_id
         }
 
@@ -73,21 +93,26 @@ class Comment(db.Model):
         return {
             "id": self.id,
             "content": self.content,
+            "created_at": self.created_at.isoformat(),
             "user_id": self.user_id,
-            "post_id": self.post_id,
-            "created_at": self.created_at
+            "post_id": self.post_id
         }
 
 
-class Like(db.Model):
-    __tablename__ = "like"
+class Likes(db.Model):
+    __tablename__ = "likes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
     post_id: Mapped[int] = mapped_column(ForeignKey("post.id"), nullable=False)
 
+    # Evita likes duplicados
+    __table_args__ = (UniqueConstraint(
+        "user_id", "post_id", name="unique_like"),)
+
     # Relaciones
+    user = relationship("User", back_populates="likes")
     post = relationship("Post", back_populates="likes")
 
     def serialize(self):
@@ -107,6 +132,23 @@ class Follower(db.Model):
         ForeignKey("user.id"), nullable=False)
     following_id: Mapped[int] = mapped_column(
         ForeignKey("user.id"), nullable=False)
+
+    # Evita duplicados
+    __table_args__ = (UniqueConstraint(
+        "follower_id", "following_id", name="unique_follow"),)
+
+    # Relaciones
+    follower = relationship(
+        "User",
+        foreign_keys=[follower_id],
+        back_populates="following"
+    )
+
+    following = relationship(
+        "User",
+        foreign_keys=[following_id],
+        back_populates="followers"
+    )
 
     def serialize(self):
         return {
