@@ -6,10 +6,9 @@ from datetime import datetime
 
 db = SQLAlchemy()
 
+
 # USERS
-
-
-class Users(db.Model):
+class User(db.Model):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -119,7 +118,6 @@ class Like(db.Model):
     post_id: Mapped[int] = mapped_column(
         ForeignKey("post.id"), nullable=False, index=True)
 
-    # Evita likes duplicados
     __table_args__ = (
         UniqueConstraint("user_id", "post_id", name="unique_like"),
     )
